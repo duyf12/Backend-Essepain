@@ -1,5 +1,5 @@
 # 1. Dùng môi trường Node.js bản rút gọn cho nhẹ
-FROM node:18-alpine
+FROM node:20-alpine
 
 # 2. Tạo thư mục chứa code bên trong Docker
 WORKDIR /app
