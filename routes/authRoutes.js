@@ -15,4 +15,5 @@ router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 router.get('/check-token', authController.checkToken);
 router.delete('/delete-account', verifyToken, authController.deleteAccount);
+router.post('/forgot-password', authController.forgotPasswordSMS);
 module.exports = router;

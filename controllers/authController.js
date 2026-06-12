@@ -3,6 +3,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Formula = require('../models/Formula');
+
+// Model Thợ sơn / Khách hàng của bạn
+const Otp = require('../models/Otp');
+const smsService = require('../services/smsService');
+
 // 1. HÀM ĐĂNG KÝ (Sử dụng phone)
 // 1. HÀM ĐĂNG KÝ (REGISTER - Đăng ký xong tự động đăng nhập)
 exports.register = async (req, res) => {
@@ -220,5 +225,43 @@ exports.deleteAccount = async (req, res) => {
 
     } catch (error) {
         res.status(500).json({ success: false, message: 'Lỗi server khi xóa tài khoản.', error: error.message });
+    }
+};
+exports.forgotPasswordSMS = async (req, res) => {
+    try {
+        const { phone } = req.body;
+
+        if (!phone) {
+            return res.status(400).json({ success: false, message: 'Vui lòng cung cấp số điện thoại!' });
+        }
+
+        // 1. Kiểm tra xem số điện thoại đã tồn tại chưa
+        const user = await User.findOne({ phone });
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Số điện thoại này chưa được đăng ký!' });
+        }
+
+        // 2. Tạo mã OTP ngẫu nhiên gồm 6 chữ số
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // 3. Xóa các mã OTP cũ của số điện thoại này (nếu có) để tránh rác DB
+        await Otp.deleteMany({ phone });
+
+        // 4. Lưu mã OTP mới vào MongoDB
+        const newOtp = new Otp({ phone, code: otpCode });
+        await newOtp.save();
+
+        // 5. Gọi Service bắn tin nhắn SMS về máy người dùng
+        await smsService.sendOTP(phone, otpCode);
+
+        // 6. Trả phản hồi về cho App React Native
+        return res.status(200).json({
+            success: true,
+            message: 'Mã OTP xác minh đã được gửi thành công!'
+        });
+
+    } catch (error) {
+        console.error("Lỗi xử lý quên mật khẩu:", error);
+        return res.status(500).json({ success: false, message: 'Lỗi hệ thống.', error: error.message });
     }
 };
