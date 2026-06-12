@@ -9,7 +9,7 @@ const smsService = {
 
             // Tên hiển thị khi gửi. Lưu ý: Lúc đang test, bạn có thể phải dùng Brandname thử nghiệm của eSMS 
             // (ví dụ: Baogia, Notify, QCA...) theo quy định của họ trước khi duyệt tên "Essepaint".
-            const BRANDNAME = "Essepaint";
+            const BRANDNAME = "Baogia";
 
             // Nội dung tin nhắn không dấu
             const content = `Ma OTP khoi phuc mat khau Essepaint cua ban la ${otpCode}. Ma co hieu luc trong 3 phut.`;
