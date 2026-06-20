@@ -3,9 +3,10 @@ const Product = require('../models/Product');
 
 exports.createOrder = async (req, res) => {
     try {
-        // 🔥 SỬA: Không lấy userId từ req.body nữa, lấy thẳng từ Token thông qua verifyToken
+        // Lấy userId từ Token thông qua verifyToken
         const userId = req.user.userId;
         const { items, shippingAddress, recipientName, recipientPhone } = req.body;
+
         // 1. Kiểm tra xem giỏ hàng gửi lên có trống không
         if (!items || items.length === 0) {
             return res.status(400).json({ success: false, message: 'Giỏ hàng của bạn đang trống!' });
@@ -16,18 +17,17 @@ exports.createOrder = async (req, res) => {
 
         // 2. Duyệt qua từng sản phẩm trong giỏ hàng gửi lên
         for (const item of items) {
-            // 🔥 SỬA: Bỏ hoàn toàn việc tìm kiếm Product.findById, check stock, và trừ stock.
-            // Hệ thống lấy trực tiếp price và quantity từ client gửi lên để tính toán
-
-            const itemPrice = item.price || 0; // Đề phòng client quên không gửi giá
+            const itemPrice = item.price || 0;
             const itemQuantity = item.quantity || 1;
+            const itemCode = item.code || ""; // 🔥 CẬP NHẬT: Lấy mã code của từng sản phẩm từ client gửi lên
 
             // Tính tổng tiền dựa trên giá client gửi
             totalAmount += itemPrice * itemQuantity;
 
-            // Đẩy thẳng vào mảng lưu vết đơn hàng
+            // Đẩy thẳng vào mảng lưu vết đơn hàng kèm theo trường code của sản phẩm đó
             orderItems.push({
                 productId: item.productId,
+                code: itemCode, // 🔥 CẬP NHẬT: Lưu mã sản phẩm vào chi tiết item trong đơn hàng
                 quantity: itemQuantity,
                 priceAtPurchase: itemPrice
             });
@@ -35,10 +35,10 @@ exports.createOrder = async (req, res) => {
 
         // 3. Tạo đơn hàng mới với userId lấy từ Token bảo mật
         const newOrder = new Order({
-            userId, // Lưu vết chính xác ông nào mua
-            recipientName,   // 🔥 Lưu tên người nhận
+            userId,
+            recipientName,
             recipientPhone,
-            items: orderItems,
+            items: orderItems, // Mảng này bây giờ đã chứa cả code của từng item
             totalAmount,
             shippingAddress
         });
