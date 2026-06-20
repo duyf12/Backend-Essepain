@@ -9,7 +9,11 @@ const OrderSchema = new mongoose.Schema({
             // 🔥 ĐÃ SỬA: Thay đổi type từ mongoose.Schema.Types.ObjectId sang String và bỏ ref: 'Product'
             productId: { type: String, required: true }, // Mua món gì? Chấp nhận mọi định dạng ID ("1", "SP-01"...)
             quantity: { type: Number, required: true }, // Mua bao nhiêu cái?
-            priceAtPurchase: { type: Number, required: true } // Lưu giá lúc mua (phòng hờ sau này sản phẩm tăng/giảm giá)
+            priceAtPurchase: { type: Number, required: true }, // Lưu giá lúc mua (phòng hờ sau này sản phẩm tăng/giảm giá)
+            code: {
+                type: String,
+                required: true // 🔥 BẮT BUỘC: Thêm dòng này để MongoDB cho phép lưu mã sản phẩm
+            },
         }
     ],
     totalAmount: { type: Number, required: true }, // Tổng tiền của cả đơn hàng
