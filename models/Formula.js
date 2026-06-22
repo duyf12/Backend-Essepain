@@ -33,7 +33,8 @@ const FormulaSchema = new mongoose.Schema({
 
     // Lưu vết người tạo công thức màu này
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    images: [{ type: String }]
 });
 
 module.exports = mongoose.model('Formula', FormulaSchema);

@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
-
+const path = require('path');
 const formulaRoutes = require('./routes/formulaRoutes');
 // Cấu hình dotenv để đọc file .env
 dotenv.config();
@@ -15,7 +15,7 @@ const app = express();
 app.use(cors());
 // Middleware để Server đọc được dữ liệu JSON từ React Native gửi lên
 app.use(express.json());
-
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Kết nối MongoDB (Thay chuỗi kết nối bằng link của bạn)
 const DB_CONNECTION = process.env.MONGO_URI;
 mongoose.connect(DB_CONNECTION)

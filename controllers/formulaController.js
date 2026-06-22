@@ -3,10 +3,27 @@ const Formula = require('../models/Formula');
 // API Lưu công thức màu sơn mới
 exports.saveFormula = async (req, res) => {
     try {
-        const { colorCode, year, standardColor, carCompany, note, hasThreeSteps, totalQuantity, colorDetails, layerBottom, layerTop } = req.body;
+        const {
+            colorCode,
+            year,
+            standardColor,
+            carCompany,
+            note,
+            hasThreeSteps,
+            totalQuantity,
+            colorDetails,
+            layerBottom,
+            layerTop
+        } = req.body;
 
         if (!colorCode) {
             return res.status(400).json({ success: false, message: 'Mã màu sơn không được bỏ trống!' });
+        }
+
+        // 1. XỬ LÝ ẢNH: Lấy danh sách đường dẫn các file ảnh được upload lên VPS
+        let imagePaths = [];
+        if (req.files && req.files.length > 0) {
+            imagePaths = req.files.map(file => `/uploads/formulas/${file.filename}`);
         }
 
         // Tạo đối tượng công thức màu mới
@@ -16,23 +33,35 @@ exports.saveFormula = async (req, res) => {
             standardColor,
             carCompany,
             note,
-            hasThreeSteps,
-            userId: req.user.userId // 🔥 SỬA ĐÂY: Khớp với req.user từ verifyToken của bạn
+            // Ép kiểu Boolean phòng trường hợp Form-Data gửi lên dạng string "true"/"false"
+            hasThreeSteps: hasThreeSteps === 'true' || hasThreeSteps === true,
+            userId: req.user.userId,
+            images: imagePaths // 🔥 LƯU MẢNG ĐƯỜNG DẪN ẢNH VÀO DB
         });
 
-        if (!hasThreeSteps) {
+        // Hàm helper để giải mã (parse) các trường mảng/object từ Form-Data gửi lên dạng String
+        const safeParse = (data) => {
+            if (typeof data === 'string') {
+                try { return JSON.parse(data); } catch (e) { return []; }
+            }
+            return data;
+        };
+
+        // 2. PHÂN LOẠI LOGIC CÔNG THỨC THEO BƯỚC SƠN
+        if (!newFormula.hasThreeSteps) {
             newFormula.totalQuantity = totalQuantity;
-            newFormula.colorDetails = colorDetails;
+            newFormula.colorDetails = safeParse(colorDetails);
         } else {
-            newFormula.layerBottom = layerBottom;
-            newFormula.layerTop = layerTop;
+            newFormula.layerBottom = safeParse(layerBottom);
+            newFormula.layerTop = safeParse(layerTop);
         }
 
+        // 3. Lưu vào database
         await newFormula.save();
 
         res.status(201).json({
             success: true,
-            message: 'Lưu công thức màu sơn thành công!',
+            message: 'Lưu công thức màu sơn kèm hình ảnh thành công!',
             data: newFormula
         });
 
