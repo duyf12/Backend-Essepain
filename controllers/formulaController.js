@@ -224,35 +224,51 @@ exports.updateFormula = async (req, res) => {
         // 🔥 4. XỬ LÝ XÓA ẢNH CŨ TRÊN VPS VÀ CẬP NHẬT ẢNH MỚI
         if (req.files && req.files.length > 0) {
 
-            // --- ĐOẠN CODE XÓA ẢNH CŨ ---
-            if (formula.images && formula.images.length > 0) {
-                formula.images.forEach(imagePath => {
-                    // Xử lý loại bỏ domain nếu lỡ bị lưu URL tuyệt đối (như lỗi dính chuỗi trước đó)
-                    let relativePath = imagePath;
-                    if (imagePath.includes('http')) {
-                        // Tách lấy phần sau domain, ví dụ: /uploads/formulas/abc.jpg
-                        relativePath = '/' + imagePath.split('/uploads/')[1];
-                        relativePath = path.join('uploads', relativePath.replace('/formulas/', 'formulas/'));
+            if (formula.images) {
+                let oldImagesArray = [];
+
+                // 1. Ép dữ liệu ảnh cũ về dạng mảng chuẩn
+                if (typeof formula.images === 'string') {
+                    oldImagesArray = formula.images.split(',').filter(img => img.trim() !== "");
+                } else if (Array.isArray(formula.images)) {
+                    oldImagesArray = formula.images;
+                }
+
+                // 2. Duyệt qua từng ảnh cũ để xóa file vật lý
+                oldImagesArray.forEach(imagePath => {
+                    let relativePath = imagePath.trim();
+
+                    // Bóc tách bỏ domain nếu có
+                    if (relativePath.includes('http')) {
+                        const parts = relativePath.split('/uploads/');
+                        if (parts.length > 1) {
+                            relativePath = 'uploads/' + parts[1];
+                        }
                     } else {
-                        // Nếu là đường dẫn tương đối chuẩn: /uploads/formulas/abc.jpg -> bỏ dấu gạch chéo đầu
-                        relativePath = imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
+                        // Nếu bắt đầu bằng dấu / thì bỏ đi để nối đường dẫn cho chuẩn
+                        if (relativePath.startsWith('/')) {
+                            relativePath = relativePath.substring(1);
+                        }
                     }
 
-                    // Tạo đường dẫn tuyệt đối đến file trong Docker (ví dụ: /app/uploads/formulas/abc.jpg)
-                    const fullPathToDelete = path.join(__dirname, '..', relativePath);
+                    // ĐỊNH VỊ ĐƯỜNG DẪN CHUẨN TRONG DOCKER (Ví dụ: /app/uploads/formulas/abc.jpg)
+                    const fullPathToDelete = path.join(process.cwd(), relativePath);
 
-                    // Kiểm tra file có tồn tại trên ổ đĩa không rồi mới tiến hành xóa
+                    // Tiến hành kiểm tra và xóa
                     if (fs.existsSync(fullPathToDelete)) {
-                        fs.unlink(fullPathToDelete, (err) => {
-                            if (err) console.error(`Lỗi khi xóa file cũ ${fullPathToDelete}:`, err);
-                            else console.log(`👉 Đã xóa file ảnh cũ vĩnh viễn trên VPS: ${fullPathToDelete}`);
-                        });
+                        try {
+                            fs.unlinkSync(fullPathToDelete); // Dùng hàm đồng bộ Sync để chắc chắn xóa xong mới chạy tiếp
+                            console.log(`👉 Đã xóa file ảnh cũ vĩnh viễn: ${fullPathToDelete}`);
+                        } catch (unlinkError) {
+                            console.error(`❌ Lỗi khi thực hiện xóa file ${fullPathToDelete}:`, unlinkError.message);
+                        }
+                    } else {
+                        console.log(`⚠️ Không tìm thấy file vật lý tại vị trí: ${fullPathToDelete}`);
                     }
                 });
             }
-            // ----------------------------
 
-            // Lưu mảng ảnh mới hoàn toàn thay thế cho mảng cũ
+            // 3. Gán mảng ảnh mới hoàn toàn vào database
             const newImagePaths = req.files.map(file => `/uploads/formulas/${file.filename}`);
             formula.images = newImagePaths;
         }
