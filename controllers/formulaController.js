@@ -80,3 +80,175 @@ exports.getMyFormulas = async (req, res) => {
         res.status(500).json({ success: false, message: 'Lỗi server không lấy được danh sách.', error: error.message });
     }
 };
+
+exports.getFormulas = async (req, res) => {
+    try {
+        const userId = req.user.userId; // Bảo mật: Thợ nào chỉ xem và tìm kiếm công thức của thợ đó
+        const { search, page = 1, limit = 10 } = req.query;
+
+        const pageNumber = parseInt(page);
+        const limitNumber = parseInt(limit);
+        const skip = (pageNumber - 1) * limitNumber;
+
+        // Bộ lọc cơ bản ban đầu
+        let query = { userId };
+
+        // Nếu App có truyền từ khóa tìm kiếm lên
+        if (search && search.trim() !== "") {
+            query.$text = { $search: search };
+        }
+
+        // Tạo câu lệnh truy vấn dữ liệu
+        let formulasQuery = Formula.find(query);
+
+        if (query.$text) {
+            // Sắp xếp các kết quả tìm kiếm trùng khớp nhiều nhất lên đầu dựa trên trọng số (score)
+            formulasQuery = formulasQuery
+                .select({ score: { $meta: "textScore" } })
+                .sort({ score: { $meta: "textScore" } });
+        } else {
+            // Nếu không tìm kiếm, mặc định đưa các công thức mới tạo lên đầu
+            formulasQuery = formulasQuery.sort({ createdAt: -1 });
+        }
+
+        // Thực hiện phân trang và lấy data
+        const formulas = await formulasQuery.skip(skip).limit(limitNumber);
+
+        // Đếm tổng số lượng bản ghi thỏa mãn điều kiện để App tính toán phân trang
+        const totalRecords = await Formula.countDocuments(query);
+
+        return res.status(200).json({
+            success: true,
+            currentPage: pageNumber,
+            totalPages: Math.ceil(totalRecords / limitNumber),
+            totalRecords,
+            data: formulas
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Lỗi server khi lấy danh sách và tìm kiếm công thức.',
+            error: error.message
+        });
+    }
+};
+exports.deleteFormula = async (req, res) => {
+    try {
+        const userId = req.user.userId; // Lấy ID người dùng từ mã token đã đăng nhập
+        const formulaId = req.params.id; // Lấy ID công thức truyền từ URL (Ví dụ: /api/formula/delete/60b8c...)
+
+        // Tìm và xóa công thức thỏa mãn đồng thời 2 điều kiện:
+        // 1. _id của công thức khớp với ID cần xóa
+        // 2. userId trong công thức phải trùng với ID của người đang thực hiện lệnh xóa
+        const deletedFormula = await Formula.findOneAndDelete({
+            _id: formulaId,
+            userId: userId
+        });
+
+        // Nếu không tìm thấy công thức hoặc công thức này thuộc về người khác
+        if (!deletedFormula) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy công thức màu sơn hoặc bạn không có quyền xóa công thức này!'
+            });
+        }
+
+        // TODO: Nếu bạn muốn xóa cả file ảnh vật lý lưu trên ổ đĩa VPS khi xóa công thức, 
+        // bạn có thể sử dụng thêm thư viện `fs` của Node.js để quét mảng `deletedFormula.images` và xóa file.
+
+        return res.status(200).json({
+            success: true,
+            message: 'Đã xóa công thức màu sơn thành công!'
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Lỗi server khi thực hiện xóa công thức màu sơn.',
+            error: error.message
+        });
+    }
+};
+exports.updateFormula = async (req, res) => {
+    try {
+        const userId = req.user.userId; // Xác thực thợ sơn
+        const formulaId = req.params.id; // ID công thức cần sửa lấy từ URL
+
+        // 1. Kiểm tra công thức này có tồn tại và thuộc quyền sở hữu của User này không
+        let formula = await Formula.findOne({ _id: formulaId, userId: userId });
+        if (!formula) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy công thức hoặc bạn không có quyền chỉnh sửa công thức này!'
+            });
+        }
+
+        // 2. Bóc tách các trường dữ liệu text gửi lên từ Form-Data
+        const {
+            colorCode, year, standardColor, carCompany, note,
+            hasThreeSteps, totalQuantity, colorDetails, layerBottom, layerTop
+        } = req.body;
+
+        if (colorCode) formula.colorCode = colorCode;
+        if (year !== undefined) formula.year = year;
+        if (standardColor !== undefined) formula.standardColor = standardColor;
+        if (carCompany !== undefined) formula.carCompany = carCompany;
+        if (note !== undefined) formula.note = note;
+
+        // Ép kiểu Boolean cho biến phân loại luồng sơn
+        if (hasThreeSteps !== undefined) {
+            formula.hasThreeSteps = hasThreeSteps === 'true' || hasThreeSteps === true;
+        }
+
+        // Hàm hỗ trợ giải mã chuỗi JSON từ Form-Data
+        const safeParse = (data) => {
+            if (typeof data === 'string') {
+                try { return JSON.parse(data); } catch (e) { return []; }
+            }
+            return data;
+        };
+
+        // 3. Cập nhật logic các thành phần tinh màu dựa vào số bước sơn
+        if (!formula.hasThreeSteps) {
+            if (totalQuantity !== undefined) formula.totalQuantity = totalQuantity;
+            if (colorDetails !== undefined) formula.colorDetails = safeParse(colorDetails);
+            // Xóa dữ liệu luồng 3 bước cũ (nếu có) để tránh rác data
+            formula.layerBottom = undefined;
+            formula.layerTop = undefined;
+        } else {
+            if (layerBottom !== undefined) formula.layerBottom = safeParse(layerBottom);
+            if (layerTop !== undefined) formula.layerTop = safeParse(layerTop);
+            // Xóa dữ liệu luồng sơn thường cũ
+            formula.totalQuantity = undefined;
+            formula.colorDetails = [];
+        }
+
+        // 4. XỬ LÝ HÌNH ẢNH MỚI (Nếu thợ sơn có chụp thêm ảnh hoặc thay ảnh)
+        if (req.files && req.files.length > 0) {
+            const newImagePaths = req.files.map(file => `/uploads/formulas/${file.filename}`);
+
+            // LỰA CHỌN: Gộp ảnh mới vào mảng ảnh cũ đã có vĩnh viễn trên Docker
+            formula.images = [...formula.images, ...newImagePaths];
+
+            // HOẶC nếu bạn muốn THAY THẾ TOÀN BỘ ẢNH CŨ bằng ảnh mới, hãy dùng dòng dưới:
+            // formula.images = newImagePaths;
+        }
+
+        // 5. Lưu lại vào MongoDB
+        await formula.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Cập nhật công thức màu sơn thành công!',
+            data: formula
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Lỗi server khi cập nhật công thức màu.',
+            error: error.message
+        });
+    }
+};

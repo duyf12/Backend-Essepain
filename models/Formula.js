@@ -36,5 +36,34 @@ const FormulaSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
     images: [{ type: String }]
 });
+FormulaSchema.index(
+    {
+        colorCode: 'text',
+        carCompany: 'text',
+        standardColor: 'text',
+        note: 'text',
+        year: 'text',
 
+        // 👇 ĐÂY CHÍNH LÀ NƠI TÌM KIẾM THEO TINH MÀU THÀNH PHẦN:
+        'colorDetails.color': 'text',             // Tìm trong mảng tinh màu sơn thường
+        'layerBottom.colorDetails.color': 'text', // Tìm trong mảng tinh màu lớp dưới (Sơn 3 bước)
+        'layerTop.colorDetails.color': 'text'     // Tìm trong mảng tinh màu lớp trên (Sơn 3 bước)
+    },
+    {
+        weights: {
+            colorCode: 5,
+            carCompany: 3,
+            standardColor: 2,
+
+            // 👇 Thiết lập độ ưu tiên (Trọng số) khi tìm thấy tên tinh màu
+            'colorDetails.color': 2,
+            'layerBottom.colorDetails.color': 2,
+            'layerTop.colorDetails.color': 2,
+
+            year: 1,
+            note: 1
+        },
+        name: "FormulaTextIndex"
+    }
+);
 module.exports = mongoose.model('Formula', FormulaSchema);
