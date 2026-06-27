@@ -1,5 +1,6 @@
 const Formula = require('../models/Formula');
-
+const fs = require('fs');
+const path = require('path');
 // API Lưu công thức màu sơn mới
 exports.saveFormula = async (req, res) => {
     try {
@@ -173,10 +174,10 @@ exports.deleteFormula = async (req, res) => {
 };
 exports.updateFormula = async (req, res) => {
     try {
-        const userId = req.user.userId; // Xác thực thợ sơn
-        const formulaId = req.params.id; // ID công thức cần sửa lấy từ URL
+        const userId = req.user.userId;
+        const formulaId = req.params.id;
 
-        // 1. Kiểm tra công thức này có tồn tại và thuộc quyền sở hữu của User này không
+        // 1. Kiểm tra quyền sở hữu công thức
         let formula = await Formula.findOne({ _id: formulaId, userId: userId });
         if (!formula) {
             return res.status(404).json({
@@ -185,7 +186,7 @@ exports.updateFormula = async (req, res) => {
             });
         }
 
-        // 2. Bóc tách các trường dữ liệu text gửi lên từ Form-Data
+        // 2. Bóc tách và cập nhật thông tin text (Giữ nguyên logic của bạn)
         const {
             colorCode, year, standardColor, carCompany, note,
             hasThreeSteps, totalQuantity, colorDetails, layerBottom, layerTop
@@ -197,12 +198,10 @@ exports.updateFormula = async (req, res) => {
         if (carCompany !== undefined) formula.carCompany = carCompany;
         if (note !== undefined) formula.note = note;
 
-        // Ép kiểu Boolean cho biến phân loại luồng sơn
         if (hasThreeSteps !== undefined) {
             formula.hasThreeSteps = hasThreeSteps === 'true' || hasThreeSteps === true;
         }
 
-        // Hàm hỗ trợ giải mã chuỗi JSON từ Form-Data
         const safeParse = (data) => {
             if (typeof data === 'string') {
                 try { return JSON.parse(data); } catch (e) { return []; }
@@ -210,38 +209,60 @@ exports.updateFormula = async (req, res) => {
             return data;
         };
 
-        // 3. Cập nhật logic các thành phần tinh màu dựa vào số bước sơn
         if (!formula.hasThreeSteps) {
             if (totalQuantity !== undefined) formula.totalQuantity = totalQuantity;
             if (colorDetails !== undefined) formula.colorDetails = safeParse(colorDetails);
-            // Xóa dữ liệu luồng 3 bước cũ (nếu có) để tránh rác data
             formula.layerBottom = undefined;
             formula.layerTop = undefined;
         } else {
             if (layerBottom !== undefined) formula.layerBottom = safeParse(layerBottom);
             if (layerTop !== undefined) formula.layerTop = safeParse(layerTop);
-            // Xóa dữ liệu luồng sơn thường cũ
             formula.totalQuantity = undefined;
             formula.colorDetails = [];
         }
 
-        // 4. XỬ LÝ HÌNH ẢNH MỚI (Nếu thợ sơn có chụp thêm ảnh hoặc thay ảnh)
+        // 🔥 4. XỬ LÝ XÓA ẢNH CŨ TRÊN VPS VÀ CẬP NHẬT ẢNH MỚI
         if (req.files && req.files.length > 0) {
+
+            // --- ĐOẠN CODE XÓA ẢNH CŨ ---
+            if (formula.images && formula.images.length > 0) {
+                formula.images.forEach(imagePath => {
+                    // Xử lý loại bỏ domain nếu lỡ bị lưu URL tuyệt đối (như lỗi dính chuỗi trước đó)
+                    let relativePath = imagePath;
+                    if (imagePath.includes('http')) {
+                        // Tách lấy phần sau domain, ví dụ: /uploads/formulas/abc.jpg
+                        relativePath = '/' + imagePath.split('/uploads/')[1];
+                        relativePath = path.join('uploads', relativePath.replace('/formulas/', 'formulas/'));
+                    } else {
+                        // Nếu là đường dẫn tương đối chuẩn: /uploads/formulas/abc.jpg -> bỏ dấu gạch chéo đầu
+                        relativePath = imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
+                    }
+
+                    // Tạo đường dẫn tuyệt đối đến file trong Docker (ví dụ: /app/uploads/formulas/abc.jpg)
+                    const fullPathToDelete = path.join(__dirname, '..', relativePath);
+
+                    // Kiểm tra file có tồn tại trên ổ đĩa không rồi mới tiến hành xóa
+                    if (fs.existsSync(fullPathToDelete)) {
+                        fs.unlink(fullPathToDelete, (err) => {
+                            if (err) console.error(`Lỗi khi xóa file cũ ${fullPathToDelete}:`, err);
+                            else console.log(`👉 Đã xóa file ảnh cũ vĩnh viễn trên VPS: ${fullPathToDelete}`);
+                        });
+                    }
+                });
+            }
+            // ----------------------------
+
+            // Lưu mảng ảnh mới hoàn toàn thay thế cho mảng cũ
             const newImagePaths = req.files.map(file => `/uploads/formulas/${file.filename}`);
-
-            // LỰA CHỌN: Gộp ảnh mới vào mảng ảnh cũ đã có vĩnh viễn trên Docker
-            formula.images = [...formula.images, ...newImagePaths];
-
-            // HOẶC nếu bạn muốn THAY THẾ TOÀN BỘ ẢNH CŨ bằng ảnh mới, hãy dùng dòng dưới:
-            // formula.images = newImagePaths;
+            formula.images = newImagePaths;
         }
 
-        // 5. Lưu lại vào MongoDB
+        // 5. Lưu vào database
         await formula.save();
 
         return res.status(200).json({
             success: true,
-            message: 'Cập nhật công thức màu sơn thành công!',
+            message: 'Cập nhật công thức và đã dọn dẹp ảnh cũ thành công!',
             data: formula
         });
 
