@@ -83,41 +83,39 @@ exports.getMyFormulas = async (req, res) => {
 
 exports.getFormulas = async (req, res) => {
     try {
-        // 🔥 ĐÃ THAY ĐỔI: Bỏ lọc theo userId để lấy công thức của TẤT CẢ mọi người
         const { search, page = 1, limit = 10 } = req.query;
 
         const pageNumber = parseInt(page);
         const limitNumber = parseInt(limit);
         const skip = (pageNumber - 1) * limitNumber;
 
-        // Bộ lọc ban đầu để trống (nghĩa là lấy toàn bộ bảng)
         let query = {};
 
-        // Nếu có từ khóa tìm kiếm (Full-Text Search)
+        // 🔥 THAY ĐỔI TẠI ĐÂY: Dùng Regex thay cho $text để gõ từ nào cũng ra
         if (search && search.trim() !== "") {
-            query.$text = { $search: search };
+            // "i" nghĩa là không phân biệt chữ hoa, chữ thường
+            const searchRegex = new RegExp(search.trim(), "i");
+
+            // Sử dụng $or để quét tất cả các trường, chỉ cần 1 trường chứa chữ "feng" là bốc ra luôn
+            query.$or = [
+                { colorCode: searchRegex },
+                { carCompany: searchRegex },
+                { standardColor: searchRegex },
+                { note: searchRegex },
+                { year: searchRegex },
+                { 'colorDetails.color': searchRegex },
+                { 'layerBottom.colorDetails.color': searchRegex },
+                { 'layerTop.colorDetails.color': searchRegex }
+            ];
         }
 
-        // Tạo câu lệnh truy vấn dữ liệu
-        let formulasQuery = Formula.find(query);
+        // Thực hiện truy vấn dữ liệu và hiển thị thông tin người tạo công thức
+        const formulas = await Formula.find(query)
+            .populate('userId', 'name email')
+            .sort({ createdAt: -1 }) // Mặc định công thức mới nhất lên đầu
+            .skip(skip)
+            .limit(limitNumber);
 
-        // 🔥 ĐÃ THÊM: Liên kết dữ liệu để lấy thêm Tên/Email của người tạo công thức (Tham khảo)
-        formulasQuery = formulasQuery.populate('userId', 'name email');
-
-        if (query.$text) {
-            // Sắp xếp theo độ trùng khớp từ khóa cao nhất lên đầu
-            formulasQuery = formulasQuery
-                .select({ score: { $meta: "textScore" } })
-                .sort({ score: { $meta: "textScore" } });
-        } else {
-            // Mặc định đưa công thức mới chia sẻ lên đầu
-            formulasQuery = formulasQuery.sort({ createdAt: -1 });
-        }
-
-        // Thực hiện phân trang và lấy dữ liệu
-        const formulas = await formulasQuery.skip(skip).limit(limitNumber);
-
-        // Đếm tổng số lượng bản ghi công thức công khai trong hệ thống
         const totalRecords = await Formula.countDocuments(query);
 
         return res.status(200).json({
@@ -131,7 +129,7 @@ exports.getFormulas = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             success: false,
-            message: 'Lỗi server khi lấy danh sách công thức cộng đồng.',
+            message: 'Lỗi server khi lấy danh sách công thức.',
             error: error.message
         });
     }
