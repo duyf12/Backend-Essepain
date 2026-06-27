@@ -9,7 +9,7 @@ const upload = require('../middleware/upload');
 // router.post('/save', verifyToken, formulaController.saveFormula);
 router.post('/save', upload.array('images', 5), verifyToken, formulaController.saveFormula);
 router.get('/my-formulas', verifyToken, formulaController.getMyFormulas);
-router.get('/list', verifyToken, formulaController.getFormulas);
+router.get('/list', formulaController.getFormulas);
 router.delete('/delete/:id', verifyToken, formulaController.deleteFormula);
 router.put('/update/:id', verifyToken, upload.array('images', 5), formulaController.updateFormula);
 module.exports = router;

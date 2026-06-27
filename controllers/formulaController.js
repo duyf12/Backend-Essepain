@@ -83,17 +83,17 @@ exports.getMyFormulas = async (req, res) => {
 
 exports.getFormulas = async (req, res) => {
     try {
-        const userId = req.user.userId; // Bảo mật: Thợ nào chỉ xem và tìm kiếm công thức của thợ đó
+        // 🔥 ĐÃ THAY ĐỔI: Bỏ lọc theo userId để lấy công thức của TẤT CẢ mọi người
         const { search, page = 1, limit = 10 } = req.query;
 
         const pageNumber = parseInt(page);
         const limitNumber = parseInt(limit);
         const skip = (pageNumber - 1) * limitNumber;
 
-        // Bộ lọc cơ bản ban đầu
-        let query = { userId };
+        // Bộ lọc ban đầu để trống (nghĩa là lấy toàn bộ bảng)
+        let query = {};
 
-        // Nếu App có truyền từ khóa tìm kiếm lên
+        // Nếu có từ khóa tìm kiếm (Full-Text Search)
         if (search && search.trim() !== "") {
             query.$text = { $search: search };
         }
@@ -101,20 +101,23 @@ exports.getFormulas = async (req, res) => {
         // Tạo câu lệnh truy vấn dữ liệu
         let formulasQuery = Formula.find(query);
 
+        // 🔥 ĐÃ THÊM: Liên kết dữ liệu để lấy thêm Tên/Email của người tạo công thức (Tham khảo)
+        formulasQuery = formulasQuery.populate('userId', 'name email');
+
         if (query.$text) {
-            // Sắp xếp các kết quả tìm kiếm trùng khớp nhiều nhất lên đầu dựa trên trọng số (score)
+            // Sắp xếp theo độ trùng khớp từ khóa cao nhất lên đầu
             formulasQuery = formulasQuery
                 .select({ score: { $meta: "textScore" } })
                 .sort({ score: { $meta: "textScore" } });
         } else {
-            // Nếu không tìm kiếm, mặc định đưa các công thức mới tạo lên đầu
+            // Mặc định đưa công thức mới chia sẻ lên đầu
             formulasQuery = formulasQuery.sort({ createdAt: -1 });
         }
 
-        // Thực hiện phân trang và lấy data
+        // Thực hiện phân trang và lấy dữ liệu
         const formulas = await formulasQuery.skip(skip).limit(limitNumber);
 
-        // Đếm tổng số lượng bản ghi thỏa mãn điều kiện để App tính toán phân trang
+        // Đếm tổng số lượng bản ghi công thức công khai trong hệ thống
         const totalRecords = await Formula.countDocuments(query);
 
         return res.status(200).json({
@@ -128,7 +131,7 @@ exports.getFormulas = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             success: false,
-            message: 'Lỗi server khi lấy danh sách và tìm kiếm công thức.',
+            message: 'Lỗi server khi lấy danh sách công thức cộng đồng.',
             error: error.message
         });
     }
